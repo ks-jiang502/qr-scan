@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>扫码器 · 截图识别二维码</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="logo" aria-hidden="true">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+        <path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3"/>
+        <path d="M8 8h3v3H8zM14 8h2v2h-2zM8 14h2v2H8zM13 13h3v3h-3z"/>
+      </svg>
+    </span>
+    <div class="brand-text">
+      <h1>扫码器</h1>
+      <p>截屏框选，直接读出二维码</p>
+    </div>
+  </div>
+
+  <div class="top-actions">
+    <label class="switch" title="识别成功后自动复制到剪贴板">
+      <input type="checkbox" id="optAutoCopy">
+      <span>自动复制</span>
+    </label>
+    <label class="switch" title="识别到网址时自动用浏览器打开">
+      <input type="checkbox" id="optAutoOpen">
+      <span>自动打开链接</span>
+    </label>
+  </div>
+</header>
+
+<main class="layout">
+
+  <section class="panel input-panel" aria-label="扫码入口">
+    <button class="primary-tile" id="btnCapture">
+      <span class="tile-icon">
+        <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2"/>
+          <path d="M3 12h18"/>
+        </svg>
+      </span>
+      <span class="tile-text">
+        <strong>截图扫码</strong>
+        <em>截取屏幕上的任意区域来识别</em>
+      </span>
+      <kbd>推荐</kbd>
+    </button>
+
+    <div class="tile-row">
+      <button class="tile" id="btnPaste">
+        <span class="tile-icon">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="8" y="3" width="8" height="4" rx="1"/>
+            <path d="M16 5h2a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h2"/>
+          </svg>
+        </span>
+        <span><strong>粘贴图片</strong><em>Ctrl + V</em></span>
+      </button>
+
+      <button class="tile" id="btnFile">
+        <span class="tile-icon">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 16V6a2 2 0 0 1 2-2h7l5 5v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/>
+            <path d="M13 4v5h5"/>
+          </svg>
+        </span>
+        <span><strong>打开图片</strong><em>本地图片</em></span>
+      </button>
+
+      <button class="tile" id="btnCamera">
+        <span class="tile-icon">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 8h3l1.5-2h7L17 8h3a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"/>
+            <circle cx="12" cy="13" r="3.2"/>
+          </svg>
+        </span>
+        <span><strong>摄像头</strong><em>用相机扫</em></span>
+      </button>
+    </div>
+
+    <p class="hint">也可以用系统截图工具截好图，直接在这里按 <kbd>Ctrl</kbd> + <kbd>V</kbd>，或把图片拖进来。</p>
+
+    <input type="file" id="fileInput" accept="image/*" hidden>
+  </section>
+
+  <section class="panel result-panel" id="resultPanel" aria-live="polite">
+    <div class="empty-state" id="emptyState">
+      <div class="empty-art" aria-hidden="true">
+        <svg viewBox="0 0 120 120" width="120" height="120" fill="none" stroke="currentColor">
+          <rect x="26" y="26" width="68" height="68" rx="12" stroke-width="2" stroke-dasharray="6 7" opacity=".5"/>
+          <rect x="40" y="40" width="10" height="10" rx="2" fill="currentColor" opacity=".7"/>
+          <rect x="70" y="40" width="10" height="10" rx="2" fill="currentColor" opacity=".7"/>
+          <rect x="40" y="70" width="10" height="10" rx="2" fill="currentColor" opacity=".7"/>
+          <rect x="62" y="62" width="8" height="8" rx="2" fill="currentColor" opacity=".35"/>
+          <rect x="72" y="72" width="8" height="8" rx="2" fill="currentColor" opacity=".35"/>
+        </svg>
+      </div>
+      <p>识别结果会显示在这里</p>
+      <span>支持网址、WiFi 密码、名片、纯文本</span>
+    </div>
+    <div class="results" id="results"></div>
+  </section>
+</main>
+
+<section class="history-block">
+  <div class="history-head">
+    <h2>最近识别</h2>
+    <button class="link-btn" id="btnClearHistory">清空</button>
+  </div>
+  <ul class="history" id="history"></ul>
+</section>
+
+<!-- 框选浮层 -->
+<div class="overlay" id="cropLayer" hidden>
+  <div class="crop-stage" id="cropStage">
+    <canvas id="cropCanvas"></canvas>
+    <div class="crop-mask" id="cropMask">
+      <div class="crop-rect" id="cropRect"></div>
+    </div>
+    <div class="crop-scanline" id="cropScanline"></div>
+  </div>
+  <div class="overlay-bar">
+    <p><strong>拖拽框选二维码区域</strong><span>松开鼠标自动识别 · Esc 取消</span></p>
+    <div class="overlay-btns">
+      <button class="ghost-btn" id="btnCropFull">识别整屏</button>
+      <button class="ghost-btn" id="btnCropCancel">取消</button>
+    </div>
+  </div>
+</div>
+
+<!-- 摄像头浮层 -->
+<div class="overlay cam-overlay" id="camLayer" hidden>
+  <div class="cam-stage">
+    <video id="camVideo" playsinline muted></video>
+    <div class="cam-frame" aria-hidden="true"></div>
+    <div class="cam-scanline" aria-hidden="true"></div>
+  </div>
+  <div class="overlay-bar">
+    <p><strong>把二维码放进取景框</strong><span>自动识别，无需按快门</span></p>
+    <div class="overlay-btns">
+      <button class="ghost-btn" id="btnCamCancel">关闭</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast" hidden></div>
+
+<script src="vendor/jsQR.js"></script>
+<script src="app/decode.js"></script>
+<script src="app/app.js"></script>
+</body>
+</html>
