@@ -57,6 +57,8 @@
 
 从源码重建：双击 `build-exe.bat`。它调用系统自带的 `csc.exe` 编译 `src\Program.cs` 并把前端资源一起嵌进去，不需要 Visual Studio 或任何 SDK。exe 图标由 `node tools/make-icon.js` 程序化生成（`icon.ico`）。
 
+在 GitHub 网页上想直接拿这个 exe：点开 `dist/扫码器.exe`，再点右上角的下载按钮（网页无法预览二进制文件，但可以下载）。
+
 ## 目录结构
 
 | 路径 | 作用 |
