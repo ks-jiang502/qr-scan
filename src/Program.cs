@@ -10,6 +10,7 @@ using System.IO;
 using System.Net;
 using System.Net.Sockets;
 using System.Reflection;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
 
@@ -192,6 +193,8 @@ static class Program
                 try { path = Uri.UnescapeDataString(path); } catch { }
 
                 _lastActivity = Environment.TickCount;
+                if (path.EndsWith(".html", StringComparison.OrdinalIgnoreCase) || path == "/")
+                    Log("页面请求 " + path);
 
                 byte[] body = LoadResource(path);
                 if (body == null)
@@ -266,41 +269,223 @@ static class Program
 
     static void OpenAppWindow(string url)
     {
-        string edge = FindEdge();
+        string browser = FindBrowser();
+        bool opened = false;
         try
         {
-            if (edge != null)
+            if (browser != null)
             {
-                Log("用 Edge 打开 " + edge);
-                ProcessStartInfo psi = new ProcessStartInfo(edge);
-                psi.Arguments = "--app=\"" + url + "\" --window-size=1220,900";
-                psi.UseShellExecute = false;
-                Process.Start(psi);
-                return;
+                string appArgs = "--app=\"" + url + "\" --window-size=1220,900";
+
+                // 先用一套独立的浏览器配置：不碰用户正在用的那个 Edge。
+                // 用户自己的配置被占用时，新起的浏览器进程会直接退出（code=21），一个窗口都不开。
+                string profile = ProfileDir();
+                if (profile != null)
+                {
+                    ClearProfileLocks(profile);
+                    string isolArgs = "--user-data-dir=\"" + profile + "\" --no-first-run --no-default-browser-check --disable-sync --disable-features=msEdgeOnboarding,msEdgeFirstRunExperience,msEdgeSyncPromo,msImplicitSignin --disable-component-update " + appArgs;
+                    Log("用浏览器打开 " + browser + "（独立配置 " + profile + "）");
+                    if (LaunchAndWait(browser, isolArgs, 20000)) opened = true;
+                }
+
+                // 兜底一：用用户自己的配置再试一次
+                if (!opened)
+                {
+                    Log("独立配置没起来，改用当前配置再试");
+                    if (LaunchAndWait(browser, appArgs, 10000)) opened = true;
+                }
+
+                if (!opened) Log("两种方式都没看到窗口，改用系统默认浏览器");
             }
-            Log("没找到 Edge，交给系统默认浏览器");
-            Process.Start(url);
+            else
+            {
+                Log("没找到 Edge/Chrome，交给系统默认浏览器");
+            }
+
+            if (!opened)
+            {
+                try { Process.Start(url); opened = true; }
+                catch (Exception ex2) { Log("默认浏览器也失败: " + ex2.Message); }
+            }
         }
         catch (Exception ex)
         {
-            Log("打开窗口失败: " + ex.Message + "，改用默认浏览器");
-            try { Process.Start(url); } catch (Exception ex2) { Log("默认浏览器也失败: " + ex2.Message); }
+            Log("打开窗口失败: " + ex.Message);
+        }
+
+        if (!opened)
+        {
+            // 一个窗口都没出来时给个明确提示，别让用户以为双击没反应
+            try
+            {
+                System.Windows.Forms.MessageBox.Show(
+                    "程序已经在后台运行，但没能自动打开窗口。\r\n\r\n请手动在浏览器里打开：\r\n" + url,
+                    "扫码器", System.Windows.Forms.MessageBoxButtons.OK,
+                    System.Windows.Forms.MessageBoxIcon.Information);
+            }
+            catch { }
         }
     }
 
-    static string FindEdge()
+
+    /// <summary>启动浏览器并等一会儿，看看界面上是不是真的出现了这个应用的窗口</summary>
+    static bool LaunchAndWait(string exe, string args, int waitMs)
     {
+        Process p = null;
+        try
+        {
+            ProcessStartInfo psi = new ProcessStartInfo(exe);
+            psi.Arguments = args;
+            psi.UseShellExecute = false;
+            psi.CreateNoWindow = true;
+            p = Process.Start(psi);
+        }
+        catch (Exception ex)
+        {
+            Log("启动失败: " + ex.Message);
+            return false;
+        }
+
+        // 全新配置目录首次启动要初始化，慢的时候七八秒才出窗口，所以耐心等
+        int waited = 0;
+        while (waited < waitMs)
+        {
+            Thread.Sleep(400);
+            waited += 400;
+            if (AppWindowExists())
+            {
+                Log("窗口已出现（" + waited + "ms）");
+                return true;
+            }
+            if (p != null && p.HasExited && waited >= 1600)
+            {
+                int code = 0;
+                try { code = p.ExitCode; } catch { }
+                Log("浏览器进程提前退出 code=" + code);
+                return AppWindowExists();
+            }
+        }
+        Log("等待 " + waitMs + "ms 仍没看到窗口");
+        return AppWindowExists();
+    }
+
+    /// <summary>界面上有没有本应用的窗口（标题里带页面标题）</summary>
+    static bool AppWindowExists()
+    {
+        bool found = false;
+        try
+        {
+            EnumWindows(delegate (IntPtr hWnd, IntPtr lParam)
+            {
+                if (!IsWindowVisible(hWnd)) return true;
+                StringBuilder sb = new StringBuilder(512);
+                GetWindowText(hWnd, sb, sb.Capacity);
+                string title = sb.ToString();
+                // 认两种标题：页面加载完是"扫码器 · 截图识别二维码"，
+                // 还在加载时浏览器会把地址显示成"127.0.0.1_/"这种东西。
+                // 只要窗口出来了就算成功 —— 页面是本地服务，马上就渲染好。
+                if (title.IndexOf("扫码器 ·", StringComparison.Ordinal) >= 0 ||
+                    title.IndexOf("127.0.0.1_", StringComparison.Ordinal) >= 0)
+                {
+                    found = true;
+                    return false;
+                }
+                return true;
+            }, IntPtr.Zero);
+        }
+        catch (Exception ex)
+        {
+            Log("检查窗口失败: " + ex.Message);
+            return true; // 检查不了就当成功，避免把好端端的窗口流程搞错
+        }
+        return found;
+    }
+
+    delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
+
+    [DllImport("user32.dll")]
+    static extern bool EnumWindows(EnumWindowsProc callback, IntPtr lParam);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    static extern int GetWindowText(IntPtr hWnd, StringBuilder text, int count);
+
+    [DllImport("user32.dll")]
+    static extern bool IsWindowVisible(IntPtr hWnd);
+
+    /// <summary>删掉 Chromium 留在配置目录里的单例锁文件</summary>
+    static void ClearProfileLocks(string profile)
+    {
+        if (string.IsNullOrEmpty(profile)) return;
+        string[] names = new string[] { "SingletonLock", "SingletonSocket", "SingletonCookie", "lockfile" };
+        foreach (string name in names)
+        {
+            try
+            {
+                string path = Path.Combine(profile, name);
+                if (File.Exists(path)) { File.Delete(path); Log("清掉 " + name); }
+                else if (Directory.Exists(path)) { Directory.Delete(path, true); Log("清掉目录 " + name); }
+            }
+            catch (Exception ex)
+            {
+                Log("清理 " + name + " 失败: " + ex.Message);
+            }
+        }
+    }
+
+    /// <summary>给这个应用专用的浏览器配置目录；逐个尝试候选位置，失败时返回 null</summary>
+    static string ProfileDir()
+    {
+        List<string> candidates = new List<string>();
+        try
+        {
+            candidates.Add(Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "qrscan", "profile"));
+        }
+        catch { }
+        try { candidates.Add(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "profile")); } catch { }
+        try { candidates.Add(Path.Combine(Path.GetTempPath(), "qrscan-profile")); } catch { }
+
+        foreach (string dir in candidates)
+        {
+            try
+            {
+                string parent = Path.GetDirectoryName(dir);
+                if (!Directory.Exists(parent)) Directory.CreateDirectory(parent);
+                if (!Directory.Exists(dir)) Directory.CreateDirectory(dir);
+                Log("配置目录 " + dir);
+                return dir;
+            }
+            catch (Exception ex)
+            {
+                Log("配置目录不可用 " + dir + " -> " + ex.GetType().Name + ": " + ex.Message);
+            }
+        }
+        return null;
+    }
+
+    static string FindBrowser()
+    {
+        // 优先 Edge，其次 Chrome —— 两者都支持 --app 独立窗口
+        string[] rels = new string[]
+        {
+            "Microsoft\\Edge\\Application\\msedge.exe",
+            "Google\\Chrome\\Application\\chrome.exe",
+        };
         string[] bases = new string[]
         {
             Environment.GetEnvironmentVariable("PROGRAMFILES(X86)"),
             Environment.GetEnvironmentVariable("PROGRAMFILES"),
             Environment.GetEnvironmentVariable("LOCALAPPDATA"),
         };
-        foreach (string b in bases)
+        foreach (string rel in rels)
         {
-            if (string.IsNullOrEmpty(b)) continue;
-            string p = Path.Combine(b, "Microsoft", "Edge", "Application", "msedge.exe");
-            if (File.Exists(p)) return p;
+            foreach (string b in bases)
+            {
+                if (string.IsNullOrEmpty(b)) continue;
+                string p = Path.Combine(b, rel);
+                if (File.Exists(p)) return p;
+            }
         }
         return null;
     }

@@ -57,6 +57,28 @@
 
 从源码重建：双击 `build-exe.bat`。它调用系统自带的 `csc.exe` 编译 `src\Program.cs` 并把前端资源一起嵌进去，不需要 Visual Studio 或任何 SDK。exe 图标由 `node tools/make-icon.js` 程序化生成（`icon.ico`）。
 
+
+### 窗口为什么用独立配置打开
+
+双击后 exe 会用一个**独立的浏览器配置目录**（`%LOCALAPPDATA%\qrscan\profile`）来开窗口，而不是直接扩你正在用的那个 Edge。原因是：你自己的 Edge 开着的时候，再让 Edge 开一个 app 窗口，新进程会拿不到配置锁直接退出（退出码 21），一个窗口都不出现——这正是「双击没反应」的常见来源。
+
+独立配置首次创建时，Edge 会想弹「同步确认」之类的引导，所以启动参数里额外禁掉了这些：`--no-first-run`、`--disable-sync`、`--disable-features=msEdgeOnboarding,msEdgeFirstRunExperience,msEdgeSyncPromo,msImplicitSignin`。
+
+### 打不开的时候
+
+先看 exe 旁边的 `qrscan.log`，它按时间记录了每一步：
+
+```
+06:22:41  服务就绪 http://127.0.0.1:7457/
+06:22:41  用浏览器打开 ...msedge.exe（独立配置 C:\Users\你\AppData\Local\qrscan\profile）
+06:22:47  页面请求 /index.html
+06:22:47  窗口已出现（6400ms）
+```
+
+- **没有「窗口已出现」**：说明 Edge 没能开出窗口。程序会接着用你正在用的那个 Edge 配置再试一次，再不行就交给系统默认浏览器，最后仍失败会弹一个提示框告诉你手动打开哪个地址。
+- **有「窗口已出现」但看不见**：窗口可能开在屏幕外或最小化了，任务栏里找一下「扫码器」。
+- **想彻底重来**：关掉程序，删掉 `%LOCALAPPDATA%\qrscan` 目录，再双击。
+
 在 GitHub 网页上想直接拿这个 exe：点开 `dist/扫码器.exe`，再点右上角的下载按钮（网页无法预览二进制文件，但可以下载）。
 
 ## 目录结构
