@@ -1,0 +1,9 @@
+# 统一换行：文本用 LF，但 Windows 批处理必须是 CRLF（见 README 的构建说明）
+* text=auto eol=lf
+*.bat text eol=crlf
+*.vbs text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+*.exe binary
+*.png binary
+*.ico binary
